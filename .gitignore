@@ -1,2 +1,9 @@
+images/
+imagess/
+imagez/
 venv/
 tutorial/
+.env
+property_rental.db
+listings.xlsx
+links.txt

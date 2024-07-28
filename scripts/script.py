@@ -1,3 +1,5 @@
+import json
+import pandas as pd
 from faker import Faker
 import random
 from enum import Enum as PyEnum
@@ -12,13 +14,12 @@ from sqlalchemy import (
     String,
     Float,
     Boolean,
-    Date,
     Enum,
     ForeignKey
 )
 
 # Database configuration
-DATABASE_URL = 'sqlite:///:memory:'
+DATABASE_URL = 'sqlite:///property_rental.db'
 
 # SQLAlchemy setup
 Base = declarative_base()
@@ -39,7 +40,6 @@ class MarketStatus(PyEnum):
 class Category(PyEnum):
     FOR_RENT = "For Rent"
     FOR_SALE = "For Sale"
-    SHORT_LET = "Short Let"
 
 class Currency(PyEnum):
     GHC = "GHC"
@@ -58,7 +58,6 @@ class ResidentialSubtype(PyEnum):
     APARTMENT = "Apartment"
     HOUSE = "House"
     STUDENTS_HOSTEL = "Students' Hostel"
-    CONDO = "Condo"
     HOTEL = "Hotel"
     GUEST_HOUSE = "Guest House"
 
@@ -73,11 +72,11 @@ class Listing(Base):
     __tablename__ = 'listings'
     
     id = Column(Integer, primary_key=True, autoincrement=True)
-    publish_status = Column(Enum(PublishStatus), default=PublishStatus.UNPUBLISH)
+    publish_status = Column(Enum(PublishStatus), default=PublishStatus.PUBLISH)
     property_id = Column(String, unique=True, nullable=False)
     title = Column(String, nullable=False)
     description = Column(String, nullable=False)
-    market_status = Column(Enum(MarketStatus), nullable=False)
+    market_status = Column(Enum(MarketStatus), default=MarketStatus.AVAILABLE)
     category = Column(Enum(Category), nullable=False)
     type = Column(Enum(PropertyType), nullable=False)
     subtype = Column(String, nullable=False)
@@ -152,7 +151,7 @@ titles = [
     "Luxury Apartment in Downtown",
     "Cozy Family House with Garden",
     "Spacious Office Space in Business District",
-    "Modern Condo near University",
+    "Modern accommodation near University",
     "Charming Guest House by the Beach",
     "Elegant Hotel in City Center",
     "Affordable Hostel for Students",
@@ -165,7 +164,7 @@ descriptions = [
     "This luxury apartment offers stunning views of the downtown skyline and features top-of-the-line amenities.",
     "A cozy family house with a beautiful garden, perfect for children and pets.",
     "Spacious office space located in the heart of the business district, ideal for startups and established companies.",
-    "Modern condo located near the university, perfect for students and faculty members.",
+    "Modern accommodation located near the university, perfect for students and faculty members.",
     "Charming guest house situated by the beach, offering a relaxing atmosphere and stunning ocean views.",
     "Elegant hotel in the city center with a variety of rooms and suites, ideal for business and leisure travelers.",
     "Affordable hostel for students, offering shared rooms and communal facilities.",
@@ -187,21 +186,38 @@ addresses = [
     ("Mall Road", "707", "11234", "Koforidua", "Ghana", "KO-012-3456")
 ]
 
-images = [
-    "https://example.com/image1.jpg",
-    "https://example.com/image2.jpg",
-    "https://example.com/image3.jpg",
-    "https://example.com/image4.jpg",
-    "https://example.com/image5.jpg",
-    "https://example.com/image6.jpg",
-    "https://example.com/image7.jpg",
-    "https://example.com/image8.jpg",
-    "https://example.com/image9.jpg",
-    "https://example.com/image10.jpg"
-]
+# images = [
+#     "https://example.com/image1.jpg",
+#     "https://example.com/image2.jpg",
+#     "https://example.com/image3.jpg",
+#     "https://example.com/image4.jpg",
+#     "https://example.com/image5.jpg",
+#     "https://example.com/image6.jpg",
+#     "https://example.com/image7.jpg",
+#     "https://example.com/image8.jpg",
+#     "https://example.com/image9.jpg",
+#     "https://example.com/image10.jpg"
+# ]
+
+def generate_images():
+    return json.dumps({
+        "image1": f"local_path/image{random.randint(1, 100)}.jpg",
+        "image2": f"local_path/image{random.randint(1, 100)}.jpg",
+        "image3": f"local_path/image{random.randint(1, 100)}.jpg",
+        "image4": f"local_path/image{random.randint(1, 100)}.jpg",
+        "image5": f"local_path/image{random.randint(1, 100)}.jpg"
+    })
 
 residential_subtypes = list(ResidentialSubtype)
 commercial_subtypes = list(CommercialSubtype)
+
+def get_price_frequency(property_type, subtype):
+    if property_type == PropertyType.RESIDENTIAL:
+        if subtype == ResidentialSubtype.STUDENTS_HOSTEL.value:
+            return random.choice(["Per Semester", "Per Academic Year"])
+        elif subtype in [ResidentialSubtype.HOTEL.value, ResidentialSubtype.GUEST_HOUSE.value]:
+            return random.choice(["Per Night", "Per Week"])
+    return random.choice(["Per Month", "Per Year"])
 
 # Generate sample listings
 def generate_sample_listings(num_listings):
@@ -213,24 +229,25 @@ def generate_sample_listings(num_listings):
         title = titles[i % len(titles)]
         description = descriptions[i % len(descriptions)]
         street_name, house_number, zip_code, city, country, digital_address = addresses[i % len(addresses)]
-        media = images[i % len(images)]
+        media = generate_images()
 
         if property_type == PropertyType.RESIDENTIAL:
             subtype = random.choice(residential_subtypes)
         else:
             subtype = random.choice(commercial_subtypes)
 
+        # Basic details
         listing = Listing(
             property_id=fake.uuid4(),
             title=title,
             description=description,
-            market_status=random.choice(list(MarketStatus)),
+            market_status=MarketStatus.AVAILABLE,
             category=random.choice(list(Category)),
             type=property_type,
             subtype=subtype.value,
             currency=random.choice(list(Currency)),
             price=round(random.uniform(10000, 1000000), 2),
-            price_frequency=random.choice(["Per Month", "Per Year", "Per Day"]),
+            price_frequency=get_price_frequency(property_type, subtype.value),
             street_name=street_name,
             house_number=house_number,
             zip_code=zip_code,
@@ -245,53 +262,100 @@ def generate_sample_listings(num_listings):
             contact_last_name=fake.last_name(),
             contact_phone=fake.phone_number(),
             contact_email=fake.email(),
-            bedrooms=random.randint(1, 5) if property_type == PropertyType.RESIDENTIAL else None,
-            bathrooms=random.randint(1, 3) if property_type == PropertyType.RESIDENTIAL else None,
-            kitchen=random.randint(1, 2) if property_type == PropertyType.RESIDENTIAL else None,
-            furnished_status=random.choice(list(FurnishedStatus)) if property_type == PropertyType.RESIDENTIAL else None,
-            total_floors=random.randint(1, 10) if property_type == PropertyType.COMMERCIAL else None,
-            floor_number=random.randint(1, 10) if property_type == PropertyType.COMMERCIAL else None,
-            parking_spaces=random.randint(0, 20) if property_type == PropertyType.COMMERCIAL else None,
-            num_floors_building=random.randint(1, 20) if subtype == ResidentialSubtype.APARTMENT else None,
-            floor_number_unit=random.randint(1, 20) if subtype == ResidentialSubtype.APARTMENT else None,
-            student_friendly=fake.boolean(),
-            num_stories=random.randint(1, 3) if subtype == ResidentialSubtype.HOUSE else None,
-            garage_spaces=random.randint(1, 3) if subtype == ResidentialSubtype.HOUSE else None,
-            room_type="Single" if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            hostel_type="Dormitory" if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            location_type="On-Campus" if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            shared_facilities=fake.boolean() if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            meal_plan_available=fake.boolean() if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            study_areas_available=fake.boolean() if subtype == ResidentialSubtype.STUDENTS_HOSTEL else None,
-            star_rating=random.randint(1, 5) if subtype == ResidentialSubtype.HOTEL else None,
-            restaurant_on_site=fake.boolean() if subtype == ResidentialSubtype.HOTEL else None,
-            office_description=fake.text() if subtype == CommercialSubtype.OFFICE_SPACE else None,
-            meeting_rooms_available=fake.boolean() if subtype == CommercialSubtype.OFFICE_SPACE else None,
-            reception_area=fake.boolean() if subtype == CommercialSubtype.OFFICE_SPACE else None,
-            display_window=fake.boolean() if subtype == CommercialSubtype.SHOP else None,
-            storage_room=fake.boolean() if subtype == CommercialSubtype.SHOP else None,
-            ceiling_height=round(random.uniform(3, 10), 2) if subtype == CommercialSubtype.WAREHOUSE else None,
-            loading_docks=fake.boolean() if subtype == CommercialSubtype.WAREHOUSE else None,
-            office_space_included=fake.boolean() if subtype == CommercialSubtype.WAREHOUSE else None,
-            goods_suitable="Electronics,Furniture,Clothing" if subtype == CommercialSubtype.WAREHOUSE else None,
-            max_capacity=random.randint(50, 500) if subtype == CommercialSubtype.EVENT_SPACE else None,
-            event_types_suitable="Conference,Wedding,Party" if subtype == CommercialSubtype.EVENT_SPACE else None,
-            catering_facilities=fake.boolean() if subtype == CommercialSubtype.EVENT_SPACE else None,
-            av_equipment_available=fake.boolean() if subtype == CommercialSubtype.EVENT_SPACE else None,
             negotiable=fake.boolean()
         )
-        
+
+        # Conditional fields
+        if property_type == PropertyType.RESIDENTIAL:
+            listing.bedrooms = random.randint(1, 5)
+            listing.bathrooms = random.randint(1, 3)
+            listing.kitchen = random.randint(1, 2)
+            listing.furnished_status = random.choice(list(FurnishedStatus))
+            
+            if subtype == ResidentialSubtype.APARTMENT:
+                listing.num_floors_building = random.randint(1, 20)
+                listing.floor_number_unit = random.randint(1, 20)
+                listing.student_friendly = fake.boolean()
+            
+            elif subtype == ResidentialSubtype.HOUSE:
+                listing.num_stories = random.randint(1, 3)
+                listing.garage_spaces = random.randint(1, 3)
+                listing.student_friendly = fake.boolean()
+            
+            elif subtype == ResidentialSubtype.STUDENTS_HOSTEL:
+                listing.room_type = random.choice(["Single room", "Double/shared room", "Triple room", "Quad room", "5+ person room(Dormitory)"])
+                listing.hostel_type = random.choice(["Male only", "Female only", "Co-ed"])
+                listing.location_type = random.choice(["On campus", "Off campus"])
+                listing.shared_facilities = fake.boolean()
+                listing.meal_plan_available = fake.boolean()
+                listing.study_areas_available = fake.boolean()
+                listing.laundry_facility_available = fake.boolean()
+                listing.cleaning_service_available = fake.boolean()
+
+            elif subtype == ResidentialSubtype.HOTEL:
+                listing.star_rating = random.randint(1, 5)
+                listing.restaurant_on_site = fake.boolean()
+            
+            elif subtype == ResidentialSubtype.GUEST_HOUSE:
+                listing.star_rating_gh = random.randint(1, 5)
+                listing.restaurant_on_site_gh = fake.boolean()
+
+        elif property_type == PropertyType.COMMERCIAL:
+            listing.total_floors = random.randint(1, 10)
+            listing.floor_number = random.randint(1, 10)
+            listing.parking_spaces = random.randint(0, 20)
+            
+            if subtype == CommercialSubtype.OFFICE_SPACE:
+                listing.office_description = fake.text()
+                listing.meeting_rooms_available = fake.boolean()
+                listing.reception_area = fake.boolean()
+            
+            elif subtype == CommercialSubtype.SHOP:
+                listing.display_window = fake.boolean()
+                listing.storage_room = fake.boolean()
+            
+            elif subtype == CommercialSubtype.WAREHOUSE:
+                listing.ceiling_height = round(random.uniform(3, 10), 2)
+                listing.loading_docks = fake.boolean()
+                listing.office_space_included = fake.boolean()
+                listing.goods_suitable = random.choice(["General Merchandise", "Perishable Goods", "Hazardous Materials", "Electronics/Sensitive Equipment", "Industrial/Construction Materials"])
+            
+            elif subtype == CommercialSubtype.EVENT_SPACE:
+                listing.max_capacity = random.randint(50, 500)
+                listing.event_types_suitable = random.choice(["Religious", "Wedding", "Funeral", "Festivals", "Conference", "Concert", "Party"])
+                listing.catering_facilities = fake.boolean()
+                listing.av_equipment_available = fake.boolean()
+
         listings.append(listing)
     return listings
+
+
+# Function to export to Excel
+def export_to_excel(listings, filename='listings.xlsx'):
+    data = []
+    for listing in listings:
+        row = {column.name: getattr(listing, column.name) for column in Listing.__table__.columns}
+        data.append(row)
+    
+    df = pd.DataFrame(data)
+    df.to_excel(filename, index=False)
+
 
 # Create the database and tables
 Base.metadata.create_all(engine)
 
 # Generate and add listings to the session
-listings = generate_sample_listings(1)
+listings = generate_sample_listings(20)
 session.add_all(listings)
 session.commit()
 
+# Export the listings to excel file
+export_to_excel(listings)
+
+
+
 # Query and print the listings to verify
 for listing in session.query(Listing).all():
-    print(f"ID: {listing.id}, Title: {listing.title}, Description: {listing.description}, Address: {listing.street_name}, {listing.city}")
+    print(f"ID: {listing.id}, Title: {listing.title}, Type: {listing.type}, Subtype: {listing.subtype}, Price Frequency: {listing.price_frequency}")
+    print(f"Media: {listing.media}")
+    print("---")
